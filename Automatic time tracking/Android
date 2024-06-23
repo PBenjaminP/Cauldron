@@ -1,0 +1,198 @@
+// MainActivity.java
+package com.example.activitytracker;
+
+import android.content.Intent;
+import android.os.Bundle;
+import android.view.View;
+import android.widget.Button;
+import android.widget.EditText;
+import android.widget.TextView;
+import androidx.appcompat.app.AppCompatActivity;
+
+public class MainActivity extends AppCompatActivity {
+    private EditText activityInput;
+    private Button startStopButton;
+    private TextView reportView;
+    private boolean isTracking = false;
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_main);
+
+        activityInput = findViewById(R.id.activity_input);
+        startStopButton = findViewById(R.id.start_stop_button);
+        reportView = findViewById(R.id.report_view);
+
+        startStopButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (isTracking) {
+                    stopTracking();
+                } else {
+                    startTracking();
+                }
+            }
+        });
+
+        findViewById(R.id.generate_report_button).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                generateReport();
+            }
+        });
+    }
+
+    private void startTracking() {
+        String activity = activityInput.getText().toString();
+        if (!activity.isEmpty()) {
+            Intent intent = new Intent(this, TrackerService.class);
+            intent.putExtra("activity", activity);
+            startService(intent);
+            isTracking = true;
+            startStopButton.setText("Stop Tracking");
+        }
+    }
+
+    private void stopTracking() {
+        Intent intent = new Intent(this, TrackerService.class);
+        stopService(intent);
+        isTracking = false;
+        startStopButton.setText("Start Tracking");
+    }
+
+    private void generateReport() {
+        String report = DataAnalyzer.generateReport(this);
+        reportView.setText(report);
+    }
+}
+
+// TrackerService.java
+package com.example.activitytracker;
+
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.Service;
+import android.content.Context;
+import android.content.Intent;
+import android.os.Build;
+import android.os.IBinder;
+import androidx.core.app.NotificationCompat;
+
+public class TrackerService extends Service {
+    private static final int NOTIFICATION_ID = 1;
+    private static final String CHANNEL_ID = "ActivityTrackerChannel";
+    private ActivityTracker tracker;
+
+    @Override
+    public void onCreate() {
+        super.onCreate();
+        tracker = new ActivityTracker(this);
+    }
+
+    @Override
+    public int onStartCommand(Intent intent, int flags, int startId) {
+        String activity = intent.getStringExtra("activity");
+        tracker.startTracking(activity);
+
+        createNotificationChannel();
+        Notification notification = new NotificationCompat.Builder(this, CHANNEL_ID)
+                .setContentTitle("Activity Tracker")
+                .setContentText("Tracking: " + activity)
+                .setSmallIcon(R.drawable.ic_notification)
+                .build();
+
+        startForeground(NOTIFICATION_ID, notification);
+
+        return START_STICKY;
+    }
+
+    @Override
+    public void onDestroy() {
+        super.onDestroy();
+        tracker.stopTracking();
+    }
+
+    @Override
+    public IBinder onBind(Intent intent) {
+        return null;
+    }
+
+    private void createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            NotificationChannel channel = new NotificationChannel(CHANNEL_ID, "Activity Tracker Channel", NotificationManager.IMPORTANCE_DEFAULT);
+            NotificationManager manager = getSystemService(NotificationManager.class);
+            manager.createNotificationChannel(channel);
+        }
+    }
+}
+
+// ActivityTracker.java
+package com.example.activitytracker;
+
+import android.content.Context;
+import android.content.SharedPreferences;
+
+import java.util.Date;
+
+public class ActivityTracker {
+    private Context context;
+    private SharedPreferences prefs;
+    private String currentActivity;
+    private long startTime;
+
+    public ActivityTracker(Context context) {
+        this.context = context;
+        this.prefs = context.getSharedPreferences("ActivityTracker", Context.MODE_PRIVATE);
+    }
+
+    public void startTracking(String activity) {
+        currentActivity = activity;
+        startTime = System.currentTimeMillis();
+    }
+
+    public void stopTracking() {
+        if (currentActivity != null) {
+            long duration = (System.currentTimeMillis() - startTime) / 1000; // in seconds
+            saveActivity(currentActivity, duration);
+            currentActivity = null;
+        }
+    }
+
+    private void saveActivity(String name, long duration) {
+        SharedPreferences.Editor editor = prefs.edit();
+        String key = name + "_" + new Date().getTime();
+        editor.putLong(key, duration);
+        editor.apply();
+    }
+}
+
+// DataAnalyzer.java
+package com.example.activitytracker;
+
+import android.content.Context;
+import android.content.SharedPreferences;
+
+import java.util.Map;
+
+public class DataAnalyzer {
+    public static String generateReport(Context context) {
+        SharedPreferences prefs = context.getSharedPreferences("ActivityTracker", Context.MODE_PRIVATE);
+        Map<String, ?> allEntries = prefs.getAll();
+
+        StringBuilder report = new StringBuilder("Activity Report:\n");
+        long totalDuration = 0;
+
+        for (Map.Entry<String, ?> entry : allEntries.entrySet()) {
+            String[] parts = entry.getKey().split("_");
+            String activity = parts[0];
+            long duration = (Long) entry.getValue();
+            totalDuration += duration;
+            report.append(activity).append(": ").append(duration).append(" seconds\n");
+        }
+
+        report.append("Total tracked time: ").append(totalDuration).append(" seconds");
+        return report.toString();
+    }
+}
