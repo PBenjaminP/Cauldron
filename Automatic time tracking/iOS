@@ -1,0 +1,111 @@
+import UIKit
+import CoreData
+
+// MARK: - Activity Tracker
+
+class ActivityTracker {
+    static let shared = ActivityTracker()
+    private var startTime: Date?
+    private var currentActivity: String?
+    
+    func startTracking(activity: String) {
+        endTracking()
+        startTime = Date()
+        currentActivity = activity
+    }
+    
+    func endTracking() {
+        guard let start = startTime, let activity = currentActivity else { return }
+        let duration = Int(-start.timeIntervalSinceNow)
+        saveActivity(name: activity, duration: duration)
+        startTime = nil
+        currentActivity = nil
+    }
+    
+    private func saveActivity(name: String, duration: Int) {
+        guard let appDelegate = UIApplication.shared.delegate as? AppDelegate else { return }
+        let managedContext = appDelegate.persistentContainer.viewContext
+        let entity = NSEntityDescription.entity(forEntityName: "Activity", in: managedContext)!
+        let activity = NSManagedObject(entity: entity, insertInto: managedContext)
+        
+        activity.setValue(name, forKeyPath: "name")
+        activity.setValue(duration, forKeyPath: "duration")
+        activity.setValue(Date(), forKeyPath: "date")
+        
+        do {
+            try managedContext.save()
+        } catch let error as NSError {
+            print("Could not save. \(error), \(error.userInfo)")
+        }
+    }
+}
+
+// MARK: - Data Analyzer
+
+class DataAnalyzer {
+    static func generateReport() -> String {
+        guard let appDelegate = UIApplication.shared.delegate as? AppDelegate else { return "Error accessing data" }
+        let managedContext = appDelegate.persistentContainer.viewContext
+        let fetchRequest = NSFetchRequest<NSManagedObject>(entityName: "Activity")
+        
+        do {
+            let activities = try managedContext.fetch(fetchRequest)
+            var report = "Activity Report:\n"
+            var totalDuration = 0
+            
+            for activity in activities {
+                let name = activity.value(forKeyPath: "name") as? String ?? "Unknown"
+                let duration = activity.value(forKeyPath: "duration") as? Int ?? 0
+                totalDuration += duration
+                report += "\(name): \(duration) seconds\n"
+            }
+            
+            report += "Total tracked time: \(totalDuration) seconds"
+            return report
+        } catch let error as NSError {
+            return "Could not fetch. \(error), \(error.userInfo)"
+        }
+    }
+}
+
+// MARK: - View Controller
+
+class ViewController: UIViewController {
+    @IBOutlet weak var activityTextField: UITextField!
+    @IBOutlet weak var startStopButton: UIButton!
+    @IBOutlet weak var reportTextView: UITextView!
+    
+    var isTracking = false
+    
+    @IBAction func startStopTracking(_ sender: Any) {
+        if isTracking {
+            ActivityTracker.shared.endTracking()
+            startStopButton.setTitle("Start Tracking", for: .normal)
+        } else {
+            guard let activity = activityTextField.text, !activity.isEmpty else { return }
+            ActivityTracker.shared.startTracking(activity: activity)
+            startStopButton.setTitle("Stop Tracking", for: .normal)
+        }
+        isTracking.toggle()
+    }
+    
+    @IBAction func generateReport(_ sender: Any) {
+        reportTextView.text = DataAnalyzer.generateReport()
+    }
+}
+
+// MARK: - App Delegate
+
+@UIApplicationMain
+class AppDelegate: UIResponder, UIApplicationDelegate {
+    var window: UIWindow?
+    lazy var persistentContainer: NSPersistentContainer = {
+        let container = NSPersistentContainer(name: "ActivityModel")
+        container.loadPersistentStores { (storeDescription, error) in
+            if let error = error as NSError? {
+                fatalError("Unresolved error \(error), \(error.userInfo)")
+            }
+        }
+        return container
+    }()
+}
