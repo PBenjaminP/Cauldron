@@ -3,7 +3,7 @@ HackMD co-documentary
 https://g0v.hackmd.io/s/BkGmY2jV0
 
 IOS code
-由於iOS的系統限制，請注意，這個應用只能在用戶主動使用時追蹤活動，不能在背景持續運行或追蹤其他應用的使用情況。
+由於iOS的系統限制，這個應用只能在用戶主動使用時追蹤活動，不能在背景持續運行或追蹤其他應用的使用情況。
 近端佈署代碼：
 1.	在Xcode中創建一個新的iOS應用項目。
 2.	添加一個Core Data模型，命名為"ActivityModel"，並創建一個名為"Activity"的實體，包含"name"(String)、"duration"(Integer)和"date"(Date)屬性。
